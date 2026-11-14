@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FlatDust // Redstone Esolang IDE</title>
+  <style>
+    :root {
+      --bg-dark: #151b1c; --bg-panel: #1d2525; --bg-input: #192120;
+      --border: #34413e; --text-main: #d2ded8; --text-muted: #9baea4;
+      --redstone-off: #553b3a; --redstone-on: #d88b7d;
+      --redstone-glow: rgba(216, 139, 125, 0.22); --accent-green: #648b76;
+      --accent-amber: #c5a977;
+      --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg-dark); color: var(--text-main); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+    header { background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; flex: none; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 1rem; letter-spacing: .02em; }
+    .redstone-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--redstone-on); box-shadow: 0 0 8px var(--redstone-glow); }
+    .controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; order: 1; margin-left: auto; }
+    .header-actions { display: flex; align-items: center; gap: 8px; order: 2; }
+    .guide-button, .share-button { padding: 6px 10px; }
+    .share-button.copied { border-color: var(--accent-green); color: #8fd1ad; }
+    select, button, input { font-family: inherit; font-size: .85rem; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-main); }
+    select, button { cursor: pointer; }
+    select:hover, button:hover { border-color: #82998d; }
+    input { width: 65px; padding: 7px; }
+    .lever-label { font-size: .8rem; color: var(--text-muted); }
+    button.btn-run { background: var(--accent-green); border-color: transparent; color: #f4f8f5; font-weight: 600; }
+    button.btn-run:hover { background: #769b87; }
+    button.btn-stop { background: #594441; border-color: transparent; color: #f1ded8; font-weight: 600; }
+    button.btn-stop:hover { background: #705550; }
+    main { display: flex; padding: 16px 24px; flex: 1; min-height: 0; }
+    .panel { background: var(--bg-panel); border: 1px solid var(--border); border-radius: 10px; display: flex; flex-direction: column; overflow: hidden; }
+    .panel-header { padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: .8rem; font-weight: 600; letter-spacing: .01em; color: var(--text-muted); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .editor-area { display: flex; flex-direction: column; gap: 16px; flex: 1; min-width: 0; min-height: 0; }
+    .editor-area > .panel:last-child { min-height: 0; }
+    textarea { width: 100%; height: 110px; background: var(--bg-input); color: #e6b3a8; font-family: var(--font-mono); font-size: 1.1rem; line-height: 1.5; padding: 16px; border: none; resize: vertical; letter-spacing: .04em; outline: none; }
+    .tape-container { padding: 16px; background: var(--bg-input); border-top: 1px solid var(--border); overflow-x: auto; display: flex; gap: 6px; min-height: 76px; align-items: center; }
+    .block-cell { min-width: 38px; height: 42px; border: 1px solid var(--border); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-weight: 500; font-size: 1rem; background: var(--bg-panel); position: relative; transition: transform .1s ease, border-color .1s ease; }
+    .block-cell.active { border-color: var(--redstone-on); box-shadow: 0 0 10px var(--redstone-glow); transform: translateY(-2px); color: #fff4ef; background: #493632; }
+    .block-idx { font-size: .6rem; color: var(--text-muted); position: absolute; top: 2px; left: 4px; }
+    .telemetry-bar { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--border); }
+    .stat-box { background: var(--bg-input); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .stat-label { font-size: .7rem; color: var(--text-muted); margin-bottom: 5px; }
+    .stat-val { font-family: var(--font-mono); font-size: 1rem; font-weight: 500; color: var(--text-main); }
+    .signal-bar-bg { width: 100%; height: 6px; background: var(--redstone-off); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+    .signal-bar-fill { height: 100%; width: 0; background: var(--redstone-on); box-shadow: 0 0 8px var(--redstone-on); transition: width .1s ease; }
+    .console-log { flex: 1; background: var(--bg-input); font-family: var(--font-mono); font-size: .85rem; padding: 14px 16px; overflow-y: auto; line-height: 1.5; overflow-wrap: anywhere; }
+    .log-line { margin-bottom: 6px; } .log-lamp { color: #dfc594; } .log-sys { color: var(--text-muted); } .log-warn { color: #e3a69a; }
+    .hopper-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 12px; background: var(--bg-input); border-bottom: 1px solid var(--border); flex: none; }
+    .hopper-slot { border: 1px solid var(--border); border-radius: 4px; padding: 6px; font-family: var(--font-mono); font-size: .75rem; text-align: center; background: var(--bg-panel); }
+    .hopper-slot.selected { border-color: var(--accent-amber); background: rgba(197,169,119,.12); }
+    .hopper-index { color: var(--text-muted); font-size: .65rem; }
+    .guide-panel { position: fixed; z-index: 10; top: 8px; right: 8px; bottom: 8px; width: min(340px, calc(100vw - 16px)); box-shadow: 0 8px 32px rgba(0,0,0,.7); }
+    .ref-list { padding: 12px 16px; overflow-y: auto; font-size: .82rem; flex: 1; min-height: 0; }
+    .ref-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .ref-char { font-family: var(--font-mono); font-weight: 500; color: #e6b3a8; min-width: 24px; text-align: center; background: var(--bg-input); border: 1px solid var(--border); border-radius: 5px; padding: 1px 4px; }
+    .ref-desc strong { color: var(--text-main); display: block; font-size: .8rem; font-weight: 600; }
+    .ref-desc span { color: var(--text-muted); font-size: .75rem; line-height: 1.5; }
+    [hidden] { display: none !important; }
+    @media (max-width: 600px) {
+      header { padding: 8px 12px; gap: 6px; }
+      .brand { font-size: .85rem; }
+      .redstone-dot { width: 9px; height: 9px; }
+      .header-actions { order: 1; margin-left: auto; gap: 4px; }
+      .guide-button, .share-button { padding: 4px 8px; font-size: .75rem; }
+      .controls { order: 2; width: 100%; margin-left: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 5px; }
+      .controls select { grid-column: span 3; width: 100%; min-width: 0; }
+      .controls .lever-label, .controls button { grid-column: span 2; min-width: 0; }
+      .controls select, .controls button, .controls input { font-size: .7rem; padding: 5px; }
+      .controls button { white-space: nowrap; }
+      .lever-label { display: flex; align-items: center; gap: 3px; font-size: .65rem; white-space: nowrap; }
+      .lever-label input { width: 42px; min-width: 0; }
+      main { padding: 8px 12px; }
+      .editor-area { gap: 8px; }
+      .panel-header { padding: 7px 10px; font-size: .7rem; }
+      textarea { height: 60px; min-height: 40px; padding: 8px; font-size: 1rem; }
+      .tape-container { padding: 8px; min-height: 58px; }
+      .telemetry-bar { gap: 5px; padding: 7px; }
+      .stat-box { padding: 6px; min-width: 0; }
+      .stat-label { font-size: .55rem; }
+      .stat-val { font-size: .8rem; }
+      .console-log { padding: 8px; font-size: .75rem; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="redstone-dot"></div>
+      <span>FlatDust IDE</span>
+    </div>
+
+    <div class="header-actions">
+      <button class="share-button" id="shareBtn" onclick="shareCircuit()">Share Link</button>
+      <button class="guide-button" onclick="toggleGuide()">Guide &amp; Hoppers</button>
+    </div>
+
+    <div class="controls">
+      <select id="presetSelect" onchange="loadPreset()">
+        <option value="B----R--*">1: Decay &amp; Repeater</option>
+        <option value="B---HR--S*">2: Hopper Subtract</option>
+        <option value="BQ*Q*">3: Copper Bulb Toggle</option>
+        <option value="B--P-*#">4: Piston vs Obsidian</option>
+        <option value="L--R-T*">5: Lever &amp; Torch NOT</option>
+        <option value="L*O">6: Truth-Machine (Lever 0/15)</option>
+      </select>
+
+      <select id="speedSelect">
+        <option value="120">Normal (120ms)</option>
+        <option value="350">Slow (350ms)</option>
+        <option value="15">Fast (15ms)</option>
+        <option value="0">Instant</option>
+      </select>
+
+      <label class="lever-label">Lever:
+        <input type="number" id="leverInput" min="0" max="15" value="15" oninput="syncUrlHash()" />
+      </label>
+
+      <button class="btn-run" onclick="startExecution()">▶ Run</button>
+      <button class="btn-stop" onclick="stopExecution()">■ Stop</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="editor-area">
+      <div class="panel">
+        <div class="panel-header">
+          <span>Circuit Blueprint</span>
+          <span id="charCount">9 Blocks</span>
+        </div>
+        <textarea id="codeInput" spellcheck="false" oninput="handleCodeEdit()">B----R--*</textarea>
+        <div class="tape-container" id="tapeVisualizer"></div>
+      </div>
+
+      <div class="panel" style="flex: 1;">
+        <div class="panel-header">
+          <span>Telemetry &amp; Console</span>
+          <button onclick="clearConsole()" style="padding: 3px 8px; font-size: .7rem;">Clear</button>
+        </div>
+
+        <div class="telemetry-bar">
+          <div class="stat-box">
+            <div class="stat-label">SIGNAL STRENGTH</div>
+            <div class="stat-val" id="statSignal">0 / 15</div>
+            <div class="signal-bar-bg">
+              <div class="signal-bar-fill" id="signalBar"></div>
+            </div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-label">REDSTONE TICKS</div>
+            <div class="stat-val" id="statTicks">0</div>
+          </div>
+
+          <div class="stat-box">
+            <div class="stat-label">COPPER BULB</div>
+            <div class="stat-val" id="statBulb">OFF (0)</div>
+          </div>
+        </div>
+
+        <div class="console-log" id="consoleLog">
+          <div class="log-line log-sys">Ready. Press ▶ Run to energize the circuit.</div>
+        </div>
+      </div>
+    </div>
+
+    <aside class="panel guide-panel" id="guidePanel" hidden>
+      <div class="panel-header">
+        <span>Hoppers &amp; Block Guide</span>
+        <button onclick="toggleGuide()" style="padding: 2px 8px; font-size: .75rem;">✕</button>
+      </div>
+
+      <div class="hopper-grid" id="hopperGrid"></div>
+
+      <div class="ref-list">
+        <div class="ref-item"><div class="ref-char">B</div><div class="ref-desc"><strong>Redstone Block</strong><span>Constant strength 15 source.</span></div></div>
+        <div class="ref-item"><div class="ref-char">L</div><div class="ref-desc"><strong>Lever</strong><span>Reads strength (0–15) from Lever input box.</span></div></div>
+        <div class="ref-item"><div class="ref-char">U</div><div class="ref-desc"><strong>Button</strong><span>Emits strength 15 for 10 ticks.</span></div></div>
+        <div class="ref-item"><div class="ref-char">-</div><div class="ref-desc"><strong>Redstone Dust</strong><span>Carries pulse; decays by 1.</span></div></div>
+        <div class="ref-item"><div class="ref-char">R</div><div class="ref-desc"><strong>Repeater (1-Tick)</strong><span>Boosts signal to 15 (+1 tick).</span></div></div>
+        <div class="ref-item"><div class="ref-char">1-4</div><div class="ref-desc"><strong>Repeater (1–4 Ticks)</strong><span>Boosts to 15 with N-tick delay.</span></div></div>
+        <div class="ref-item"><div class="ref-char">X</div><div class="ref-desc"><strong>Locked Repeater</strong><span>Freezes signal if active Hopper &gt; 0.</span></div></div>
+        <div class="ref-item"><div class="ref-char">T</div><div class="ref-desc"><strong>Redstone Torch</strong><span>NOT gate (0/15). Burns out if spammed.</span></div></div>
+        <div class="ref-item"><div class="ref-char">C</div><div class="ref-desc"><strong>Comparator (Compare)</strong><span>Passes signal if &gt;= Hopper, else 0.</span></div></div>
+        <div class="ref-item"><div class="ref-char">S</div><div class="ref-desc"><strong>Comparator (Subtract)</strong><span>Outputs max(0, signal - Hopper).</span></div></div>
+        <div class="ref-item"><div class="ref-char">Q</div><div class="ref-desc"><strong>Copper Bulb</strong><span>T-Flip-Flop: toggles 0/15 on power.</span></div></div>
+        <div class="ref-item"><div class="ref-char">O</div><div class="ref-desc"><strong>Observer</strong><span>Loops to index 0 if signal changes.</span></div></div>
+        <div class="ref-item"><div class="ref-char">H</div><div class="ref-desc"><strong>Hopper</strong><span>Stores signal (1–15) or outputs if 0.</span></div></div>
+        <div class="ref-item"><div class="ref-char">&gt;&lt;</div><div class="ref-desc"><strong>Hopper Pointer</strong><span>Shifts active Hopper slot right/left.</span></div></div>
+        <div class="ref-item"><div class="ref-char">P</div><div class="ref-desc"><strong>Piston</strong><span>Pushes next block forward (blocked by #).</span></div></div>
+        <div class="ref-item"><div class="ref-char">#</div><div class="ref-desc"><strong>Obsidian</strong><span>Immovable block; stops Pistons.</span></div></div>
+        <div class="ref-item"><div class="ref-char">*</div><div class="ref-desc"><strong>Redstone Lamp</strong><span>Prints signal strength &amp; ASCII char.</span></div></div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    let running = false;
+    let abortController = false;
+
+    const codeInput = document.getElementById('codeInput');
+    const leverInput = document.getElementById('leverInput');
+    const tapeVisualizer = document.getElementById('tapeVisualizer');
+    const consoleLog = document.getElementById('consoleLog');
+    const guidePanel = document.getElementById('guidePanel');
+
+    function toggleGuide() {
+      guidePanel.hidden = !guidePanel.hidden;
+    }
+
+    function log(msg, className = 'log-sys') {
+      const div = document.createElement('div');
+      div.className = `log-line ${className}`;
+      div.textContent = msg;
+      consoleLog.appendChild(div);
+      consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    function clearConsole() {
+      consoleLog.innerHTML = '';
+    }
+
+    function syncUrlHash() {
+      const payload = JSON.stringify({
+        c: codeInput.value,
+        l: leverInput.value
+      });
+      const encoded = btoa(encodeURIComponent(payload));
+      history.replaceState(null, '', '#' + encoded);
+    }
+
+    function loadFromUrlHash() {
+      const hash = window.location.hash.slice(1);
+      if (!hash) return false;
+      try {
+        const decoded = decodeURIComponent(atob(hash));
+        const data = JSON.parse(decoded);
+        if (typeof data.c === 'string') codeInput.value = data.c;
+        if (data.l !== undefined) leverInput.value = data.l;
+        return true;
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function shareCircuit() {
+      syncUrlHash();
+      const shareUrl = window.location.href;
+      const btn = document.getElementById('shareBtn');
+      try {
+        await navigator.clipboard.writeText(shareUrl);
+        btn.textContent = '✓ Copied!';
+        btn.classList.add('copied');
+        log('[System] Shareable circuit URL copied to clipboard.');
+      } catch (e) {
+        prompt('Copy this shareable FlatDust circuit link:', shareUrl);
+      }
+      setTimeout(() => {
+        btn.textContent = 'Share Link';
+        btn.classList.remove('copied');
+      }, 2000);
+    }
+
+    function handleCodeEdit() {
+      renderTape();
+      syncUrlHash();
+    }
+
+    function loadPreset() {
+      stopExecution();
+      codeInput.value = document.getElementById('presetSelect').value;
+      renderTape();
+      syncUrlHash();
+    }
+
+    function renderTape(gridArray = null, activeIndex = -1) {
+      const blocks = gridArray || codeInput.value.trim().split('');
+      document.getElementById('charCount').textContent = `${blocks.length} Blocks`;
+      tapeVisualizer.innerHTML = '';
+
+      blocks.forEach((char, idx) => {
+        const cell = document.createElement('div');
+        cell.className = 'block-cell' + (idx === activeIndex ? ' active' : '');
+        cell.innerHTML = `<span class="block-idx">${idx}</span>${char === ' ' ? '·' : char}`;
+        tapeVisualizer.appendChild(cell);
+      });
+    }
+
+    function renderHoppers(hoppers, ptr) {
+      const grid = document.getElementById('hopperGrid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      for (let i = 0; i < 8; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'hopper-slot' + (i === ptr ? ' selected' : '');
+        slot.innerHTML = `<div class="hopper-index">Slot #${i}</div><strong>${hoppers[i]}</strong>`;
+        grid.appendChild(slot);
+      }
+    }
+
+    function updateTelemetry(signal, ticks, bulb) {
+      document.getElementById('statSignal').textContent = `${signal} / 15`;
+      document.getElementById('signalBar').style.width = `${(signal / 15) * 100}%`;
+      document.getElementById('statTicks').textContent = ticks;
+      document.getElementById('statBulb').textContent = bulb > 0 ? `ON (${bulb})` : 'OFF (0)';
+    }
+
+    const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+    function stopExecution() {
+      if (running) {
+        abortController = true;
+        running = false;
+        log('[System] Circuit manually halted.', 'log-warn');
+      }
+    }
+
+    async function startExecution() {
+      if (running) stopExecution();
+      await sleep(30);
+
+      running = true;
+      abortController = false;
+      clearConsole();
+
+      let grid = codeInput.value.trim().split('');
+      let pc = 0;
+      let direction = 1;
+      let signal = 0;
+      let ticks = 0;
+      let hoppers = new Array(64).fill(0);
+      let hPtr = 0;
+      let copperBulb = 0;
+      let observerLast = null;
+      let torchToggles = [];
+      let buttonTimer = 0;
+      let steps = 0;
+      const maxSteps = 1000;
+
+      renderHoppers(hoppers, hPtr);
+      updateTelemetry(signal, ticks, copperBulb);
+      log(`--- Powering Circuit: ${grid.join('')} ---`);
+
+      const stepTick = async (count = 1) => {
+        ticks += count;
+        if (buttonTimer > 0) {
+          buttonTimer -= count;
+          if (buttonTimer <= 0) signal = 0;
+        }
+        updateTelemetry(signal, ticks, copperBulb);
+        const speed = parseInt(document.getElementById('speedSelect').value, 10);
+        if (speed > 0) {
+          await sleep(speed * count);
+        } else if (steps % 15 === 0) {
+          await sleep(0);
+        }
+      };
+
+      while (pc >= 0 && pc < grid.length && steps < maxSteps) {
+        if (abortController) return;
+
+        const block = grid[pc];
+        steps++;
+        renderTape(grid, pc);
+        await stepTick(1);
+
+        if (block === 'B') {
+          signal = 15;
+          direction = 1;
+        } else if (block === 'L') {
+          const raw = parseInt(leverInput.value, 10);
+          signal = isNaN(raw) ? 0 : Math.min(15, Math.max(0, raw));
+          log(`[Tick ${ticks}] Lever injected strength ${signal}.`);
+        } else if (block === 'U') {
+          signal = 15;
+          buttonTimer = 10;
+        } else if (block === '-') {
+          signal = Math.max(0, signal - 1);
+          if (signal === 0) {
+            log(`[Tick ${ticks}] Signal decayed to 0 at block ${pc}.`, 'log-warn');
+            break;
+          }
+        } else if (block === 'R' || block === '1') {
+          if (signal > 0) { signal = 15; await stepTick(1); }
+        } else if (block === '2') {
+          if (signal > 0) { signal = 15; await stepTick(2); }
+        } else if (block === '3') {
+          if (signal > 0) { signal = 15; await stepTick(3); }
+        } else if (block === '4') {
+          if (signal > 0) { signal = 15; await stepTick(4); }
+        } else if (block === 'X') {
+          if (hoppers[hPtr] === 0 && signal > 0) signal = 15;
+        } else if (block === 'T') {
+          torchToggles.push(ticks);
+          torchToggles = torchToggles.filter(t => ticks - t <= 60);
+          if (torchToggles.length > 8) {
+            log(`[Tick ${ticks}] *TSHH!* Redstone Torch burned out!`, 'log-warn');
+            signal = 0;
+          } else {
+            signal = signal > 0 ? 0 : 15;
+          }
+        } else if (block === 'C') {
+          if (signal < hoppers[hPtr]) signal = 0;
+        } else if (block === 'S') {
+          signal = Math.max(0, signal - hoppers[hPtr]);
+        } else if (block === 'Q') {
+          if (signal > 0) copperBulb = copperBulb === 0 ? 15 : 0;
+          signal = copperBulb;
+        } else if (block === 'O') {
+          if (observerLast !== null && observerLast !== signal) {
+            observerLast = signal;
+            signal = 15;
+            pc = 0;
+            continue;
+          }
+          observerLast = signal;
+        } else if (block === 'H') {
+          if (signal > 0) hoppers[hPtr] = signal;
+          else signal = hoppers[hPtr];
+          renderHoppers(hoppers, hPtr);
+        } else if (block === '>') {
+          hPtr = (hPtr + 1) % hoppers.length;
+          renderHoppers(hoppers, hPtr);
+        } else if (block === '<') {
+          hPtr = (hPtr - 1 + hoppers.length) % hoppers.length;
+          renderHoppers(hoppers, hPtr);
+        } else if (block === 'P') {
+          if (signal > 0) {
+            const target = pc + direction;
+            const dest = pc + (direction * 2);
+            if (target >= 0 && target < grid.length && dest >= 0 && dest < grid.length) {
+              if (grid[target] !== '#' && grid[dest] !== '#') {
+                [grid[target], grid[dest]] = [grid[dest], grid[target]];
+                renderTape(grid, pc);
+                log(`[Tick ${ticks}] Piston pushed '${grid[dest]}' forward.`);
+              } else {
+                log(`[Tick ${ticks}] Piston blocked by Obsidian (#).`, 'log-warn');
+              }
+            }
+          }
+        } else if (block === '*') {
+          const status = signal > 0 ? 'ON ' : 'OFF';
+          const ascii = signal > 0 ? String.fromCharCode(signal * 8) : ' ';
+          log(`[Tick ${String(ticks).padStart(3, '0')}] Lamp ${status} | Strength: ${String(signal).padStart(2, '0')} | ASCII: '${ascii}'`, 'log-lamp');
+        }
+
+        updateTelemetry(signal, ticks, copperBulb);
+        pc += direction;
+      }
+
+      if (steps >= maxSteps) {
+        log('[System] Halted: Maximum tick limit reached.', 'log-warn');
+      }
+
+      renderTape(grid, -1);
+      log(`--- Circuit Finished (Total Redstone Ticks: ${ticks}) ---`);
+      running = false;
+    }
+
+    if (loadFromUrlHash()) {
+      log('[System] Loaded circuit from shared URL.');
+    }
+    renderTape();
+    renderHoppers(new Array(64).fill(0), 0);
+  </script>
+</body>
+</html>
